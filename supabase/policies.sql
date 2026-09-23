@@ -1,73 +1,34 @@
--- RIVER Club OS · Políticas de seguridad (RLS)
--- ============================================================
--- Aplicar en: Supabase Dashboard > SQL Editor > "New query" > Run
--- (o con: supabase db push / psql a la base)
---
--- Antes de aplicar, en el Dashboard desactiva:
---   Authentication > Providers > Email > "Allow new users to sign up" = OFF
---   (si la app debe seguir permitiendo administradores, agrégalos
---    manualmente desde Authentication > Users > "Add user")
---
--- Después de aplicar:
---   Los datos solo son visibles para usuarios autenticados (login de la app).
---   El rol anónimo (REST público / llave publishable) ya no puede
---   leer ni escribir NADA de estas tablas.
---
--- Nota: la app solo hace SELECT e INSERT vía la API REST, así que
--- aquí se deja select/insert para 'authenticated' y nada para 'anon'.
--- Si más adelante la app necesita UPDATE/DELETE, agrega políticas.
+-- RIVER Club OS · Production RLS
+-- Baseline tables are created in the Supabase project. This file documents the final access model.
+-- Authorization is enforced by RLS; UI visibility is not a security boundary.
 
--- 1) Quitar acceso por defecto al rol anónimo
-DO $$
-DECLARE t text;
-BEGIN
-  FOREACH t IN ARRAY ARRAY[
-    'athletes','membership_plans','memberships','payments',
-    'products','product_variants','staff_members','staff_payments','registrations'
-  ]
-  LOOP
-    EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
-    EXECUTE format('REVOKE ALL ON TABLE %I FROM anon', t);
-  END LOOP;
-END $$;
+create schema if not exists private;
 
--- 2) Limpiar políticas autogeneradas por Supabase (por defecto dejan acceso)
-DO $$
-DECLARE t text; p text; r record;
-BEGIN
-  FOREACH t IN ARRAY ARRAY[
-    'athletes','membership_plans','memberships','payments',
-    'products','product_variants','staff_members','staff_payments','registrations'
-  ]
-  LOOP
-    FOR r IN
-      SELECT policyname FROM pg_policies
-      WHERE schemaname = 'public' AND tablename = t
-        AND (policyname LIKE 'Enable %' OR policyname LIKE 'club_os_%')
-    LOOP
-      EXECUTE format('DROP POLICY IF EXISTS %I ON %I', r.policyname, t);
-    END LOOP;
-  END LOOP;
-END $$;
+do $$
+declare t text;
+begin
+  foreach t in array array[
+    'athletes','membership_plans','memberships','payments','products','product_variants',
+    'staff_members','staff_payments','registrations','sales','sale_items','notifications',
+    'audit_logs','inventory_movements'
+  ] loop
+    execute format('alter table public.%I enable row level security',t);
+    execute format('revoke all on table public.%I from anon',t);
+  end loop;
+end $$;
 
--- 3) Políticas nuevas: solo usuarios autenticados (login de la app)
---    SELECT en todas las tablas de la app:
-CREATE POLICY club_os_select_auth ON athletes          FOR SELECT TO authenticated USING (true);
-CREATE POLICY club_os_select_auth ON membership_plans  FOR SELECT TO authenticated USING (true);
-CREATE POLICY club_os_select_auth ON memberships       FOR SELECT TO authenticated USING (true);
-CREATE POLICY club_os_select_auth ON payments          FOR SELECT TO authenticated USING (true);
-CREATE POLICY club_os_select_auth ON products          FOR SELECT TO authenticated USING (true);
-CREATE POLICY club_os_select_auth ON product_variants  FOR SELECT TO authenticated USING (true);
-CREATE POLICY club_os_select_auth ON staff_members     FOR SELECT TO authenticated USING (true);
-CREATE POLICY club_os_select_auth ON staff_payments    FOR SELECT TO authenticated USING (true);
-CREATE POLICY club_os_select_auth ON registrations     FOR SELECT TO authenticated USING (true);
+-- Role helper lives outside the exposed API schema and has a fixed search_path.
+create or replace function private.current_role()
+returns public.user_role
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select coalesce((select role from public.profiles where id=auth.uid()), 'staff'::public.user_role)
+$$;
+revoke all on function private.current_role() from public,anon,authenticated;
+grant execute on function private.current_role() to authenticated;
 
---    INSERT solo donde la app lo necesita:
-CREATE POLICY club_os_insert_auth ON athletes      FOR INSERT TO authenticated WITH CHECK (true);
-CREATE POLICY club_os_insert_auth ON memberships   FOR INSERT TO authenticated WITH CHECK (true);
-CREATE POLICY club_os_insert_auth ON staff_members FOR INSERT TO authenticated WITH CHECK (true);
-CREATE POLICY club_os_insert_auth ON registrations FOR INSERT TO authenticated WITH CHECK (true);
-CREATE POLICY club_os_insert_auth ON products          FOR INSERT TO authenticated WITH CHECK (true);
-CREATE POLICY club_os_insert_auth ON product_variants  FOR INSERT TO authenticated WITH CHECK (true);
-
---    (Sin políticas UPDATE/DELETE: la API RSS no podrá modificar/borrar vía app)
+-- The transactional RPCs are SECURITY INVOKER. RLS therefore remains active inside them.
+-- See the corresponding migration for their definitions.
