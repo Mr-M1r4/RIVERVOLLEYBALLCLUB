@@ -1,0 +1,4 @@
+-- RIVER Club OS · RPC/RLS hardening
+-- The live project contains the complete transactional RPC definitions from this migration version.
+-- Keep this file as the repository marker for migration version 20260923024922.
+-- RPCs are SECURITY INVOKER and therefore remain subject to the final RLS policies.
