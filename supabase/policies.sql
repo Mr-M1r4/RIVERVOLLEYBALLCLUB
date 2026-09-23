@@ -67,5 +67,7 @@ CREATE POLICY club_os_insert_auth ON athletes      FOR INSERT TO authenticated W
 CREATE POLICY club_os_insert_auth ON memberships   FOR INSERT TO authenticated WITH CHECK (true);
 CREATE POLICY club_os_insert_auth ON staff_members FOR INSERT TO authenticated WITH CHECK (true);
 CREATE POLICY club_os_insert_auth ON registrations FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY club_os_insert_auth ON products          FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY club_os_insert_auth ON product_variants  FOR INSERT TO authenticated WITH CHECK (true);
 
 --    (Sin políticas UPDATE/DELETE: la API RSS no podrá modificar/borrar vía app)
