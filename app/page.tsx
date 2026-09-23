@@ -49,7 +49,7 @@ export default function App(){
   setLoading(false)
  }
  const canManage=role==='owner'||role==='admin', canOperate=canManage||role==='staff'
- const nav=canOperate?['dashboard','athletes','memberships','payments','products','staff','teams','attendance','arrears','reports','communications','settings','audit']:['athletes','attendance']
+ const nav=canOperate?['dashboard','athletes','memberships','payments','products','staff','teams','attendance','arrears','reports','communications',...(canManage?['settings','audit']:[])]:['athletes','attendance']
  const labels:any={dashboard:'Dashboard',athletes:'Deportistas',memberships:'Membresías',payments:'Caja y pagos',products:'Productos e inventario',staff:'Personal',communications:'Comunicaciones',audit:'Auditoría',teams:'Equipos y categorías',attendance:'Asistencia',arrears:'Cartera y morosidad',reports:'Reportes',settings:'Configuración'}
  const active=data.memberships.filter((m:Row)=>m.status==='active'&&m.end_date>=today())
  const exp=active.filter((m:Row)=>daysLeft(m.end_date)<=7).sort((a:Row,b:Row)=>a.end_date.localeCompare(b.end_date))
