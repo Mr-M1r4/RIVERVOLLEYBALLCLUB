@@ -157,7 +157,27 @@ function AttendanceSummary({data}:any){
  return <Table head={['Deportista','Presentes','Tardanzas','Ausencias','Justificadas','% asistencia']} rows={rows}/>
 }
 
-function AttendanceForm({data,f,close}:any){const [rows,setRows]=useState<Row[]>([]);useEffect(()=>{supabase.from('attendance').select('*').eq('session_id',f.session.id).then(({data:d})=>setRows(d||[]))},[f.session.id]);const team=data.teams.find((t:Row)=>t.id===f.session.team_id);const athletes=data.athletes.filter((a:Row)=>a.team_id===team?.id || (!a.team_id&&a.team===team?.name));return <div className="formgrid">{athletes.length?athletes.map((a:Row)=>{const cur=rows.find(x=>x.athlete_id===a.id)?.status||'present';return <label key={a.id}>{a.full_name}<select value={cur} onChange={async e=>{const status=e.target.value;const r=await supabase.from('attendance').upsert({session_id:f.session.id,athlete_id:a.id,status,marked_by:(await supabase.auth.getUser()).data.user?.id},{onConflict:'session_id,athlete_id'});if(r.error)alert(r.error.message);else setRows(x=>[...x.filter(y=>y.athlete_id!==a.id),{athlete_id:a.id,status}])}}><option value="present">Presente</option><option value="late">Tarde</option><option value="absent">Ausente</option><option value="excused">Justificada</option></select></label>)}):<Empty text="Este equipo no tiene deportistas asignados. Asigna el equipo desde la ficha del deportista."/>}<button onClick={close}>Cerrar</button></div>}
+function AttendanceForm({data,f,close}:any){
+ const [rows,setRows]=useState<Row[]>([])
+ useEffect(()=>{supabase.from('attendance').select('*').eq('session_id',f.session.id).then(({data:d})=>setRows(d||[]))},[f.session.id])
+ const team=data.teams.find((t:Row)=>t.id===f.session.team_id)
+ const athletes=data.athletes.filter((a:Row)=>a.team_id===team?.id || (!a.team_id&&a.team===team?.name))
+ async function mark(a:Row,status:string){
+  const user=(await supabase.auth.getUser()).data.user
+  const r=await supabase.from('attendance').upsert({session_id:f.session.id,athlete_id:a.id,status,marked_by:user?.id},{onConflict:'session_id,athlete_id'})
+  if(r.error) alert(r.error.message)
+  else setRows((current)=>[...current.filter((x)=>x.athlete_id!==a.id),{athlete_id:a.id,status}])
+ }
+ return <div className="formgrid">
+  {athletes.length ? athletes.map((a:Row)=>{
+   const current=rows.find((x:Row)=>x.athlete_id===a.id)?.status||'present'
+   return <label key={a.id}>{a.full_name}<select value={current} onChange={(e)=>mark(a,e.target.value)}>
+    <option value="present">Presente</option><option value="late">Tarde</option><option value="absent">Ausente</option><option value="excused">Justificada</option>
+   </select></label>
+  }) : <Empty text="Este equipo no tiene deportistas asignados. Asigna el equipo desde la ficha del deportista."/>}
+  <button onClick={close}>Cerrar</button>
+ </div>
+}
 
 function Arrears({data}:any){const due=data.arrears.filter((x:Row)=>Number(x.amount_due)>0);const total=due.reduce((n:number,x:Row)=>n+Number(x.amount_due),0);return <><div className="stats three"><Card n={money(total)} l="Cartera pendiente"/><Card n={due.filter((x:Row)=>x.debt_status==='overdue').length} l="Membresías vencidas con deuda"/><Card n={due.filter((x:Row)=>x.debt_status==='pending').length} l="Pendientes actuales"/></div><Table head={['Deportista','Plan','Esperado','Pagado','Deuda','Vence','Días atraso','Estado']} rows={due.map((x:Row)=>[x.full_name,x.plan_name,money(x.expected_amount),money(x.amount_paid),money(x.amount_due),x.end_date,x.days_overdue,x.debt_status])}/></>}
 
