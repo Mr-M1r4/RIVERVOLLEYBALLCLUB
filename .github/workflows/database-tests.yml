@@ -19,6 +19,10 @@ jobs:
       - uses: supabase/setup-cli@v1
         with:
           version: latest
+      - name: Link Supabase project
+        run: supabase link --project-ref ewsygagytkicxdhykjfw
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       - name: Run database tests
         run: supabase test db --linked
         env:
