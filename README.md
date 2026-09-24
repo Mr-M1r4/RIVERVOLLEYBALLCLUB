@@ -47,4 +47,6 @@ Supabase recomienda automatizar pruebas de RLS y casos negativos con pgTAP/CI an
 La siguiente transformación importante es multi-tenancy real: cada club debe quedar aislado por `club_id` mediante RLS. No se recomienda clonar manualmente una base de datos por cliente.
 
 ## Estado
+El sistema incluye ahora un panel de plataforma para administrar suscripciones SaaS y cobros por club, con periodos, vencimientos, estados e historial de pagos separados de la operación financiera de cada club.
+
 La base funcional de RIVER Club OS está implementada. Antes de comercializarla a terceros deben completarse las pruebas autenticadas end-to-end, multi-tenancy, onboarding y observabilidad.
