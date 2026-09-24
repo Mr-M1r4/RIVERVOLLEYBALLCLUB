@@ -11,15 +11,15 @@ const daysLeft=(s:string)=>Math.ceil((new Date(s+'T12:00:00').getTime()-Date.now
 
 export default function App(){
  const [session,setSession]=useState<any>(null),[loading,setLoading]=useState(true),[tab,setTab]=useState('dashboard')
- const [data,setData]=useState<Row>({athletes:[],plans:[],memberships:[],payments:[],products:[],staff:[],staffPayments:[],notifications:[],sales:[],audit:[],categories:[],teams:[],sessions:[],attendance:[],arrears:[],settings:null})
- const [role,setRole]=useState('staff'),[staffRole,setStaffRole]=useState(''),[q,setQ]=useState(''),[modal,setModal]=useState(''),[f,setF]=useState<Row>({}),[msg,setMsg]=useState(''),[reportRange,setReportRange]=useState({from:addDays(today(),-30),to:today()})
+ const [data,setData]=useState<Row>({athletes:[],plans:[],memberships:[],payments:[],products:[],staff:[],staffPayments:[],notifications:[],sales:[],audit:[],categories:[],teams:[],sessions:[],attendance:[],arrears:[],settings:null,saasSubscriptions:[],saasPayments:[],clubs:[]})
+ const [role,setRole]=useState('staff'),[isPlatformAdmin,setIsPlatformAdmin]=useState(false),[staffRole,setStaffRole]=useState(''),[q,setQ]=useState(''),[modal,setModal]=useState(''),[f,setF]=useState<Row>({}),[msg,setMsg]=useState(''),[reportRange,setReportRange]=useState({from:addDays(today(),-30),to:today()})
  const base=process.env.NEXT_PUBLIC_BASE_PATH||''
 
  useEffect(()=>{supabase.auth.getSession().then(({data})=>{setSession(data.session);if(!data.session)setLoading(false)});const {data:l}=supabase.auth.onAuthStateChange((_e,s)=>{setSession(s);if(!s)setLoading(false)});return()=>l.subscription.unsubscribe()},[])
  useEffect(()=>{if(session)load()},[session])
  async function load(){
   setLoading(true)
-  const [u,a,pl,m,p,pr,s,sp,n,sa,au,ca,te,se,att,ar,settings]=await Promise.all([
+  const [u,a,pl,m,p,pr,s,sp,n,sa,au,ca,te,se,att,ar,settings,pa,subs,saasPay,clubs]=await Promise.all([
    supabase.auth.getUser(),
    supabase.from('athletes').select('*').order('full_name'),
    supabase.from('membership_plans').select('*').order('price'),
@@ -36,7 +36,11 @@ export default function App(){
    supabase.from('training_sessions').select('*').order('session_date',{ascending:false}),
    supabase.from('attendance').select('*').order('marked_at',{ascending:false}),
    supabase.from('membership_arrears').select('*').order('amount_due',{ascending:false}),
-   supabase.from('club_settings').select('*').maybeSingle()
+   supabase.from('club_settings').select('*').maybeSingle(),
+   supabase.from('platform_admins').select('user_id').limit(1),
+   supabase.from('saas_subscriptions').select('*').order('current_period_end'),
+   supabase.from('saas_payments').select('*').order('paid_at',{ascending:false}).limit(200),
+   supabase.from('clubs').select('id,name,slug,active').order('name')
   ])
   const user=u.data.user
   if(user){
@@ -45,13 +49,14 @@ export default function App(){
    setRole(cm.data?.role||prf.data?.role||'staff')
    const me=(s.data||[]).find((x:Row)=>x.email?.toLowerCase()===user.email?.toLowerCase())
    setStaffRole(me?.role||'')
+   setIsPlatformAdmin((pa.data||[]).some((x:Row)=>x.user_id===user.id))
   }
-  setData({athletes:a.data||[],plans:pl.data||[],memberships:m.data||[],payments:p.data||[],products:pr.data||[],staff:s.data||[],staffPayments:sp.data||[],notifications:n.data||[],sales:sa.data||[],audit:au.data||[],categories:ca.data||[],teams:te.data||[],sessions:se.data||[],attendance:att.data||[],arrears:ar.data||[],settings:settings.data||null})
+  setData({athletes:a.data||[],plans:pl.data||[],memberships:m.data||[],payments:p.data||[],products:pr.data||[],staff:s.data||[],staffPayments:sp.data||[],notifications:n.data||[],sales:sa.data||[],audit:au.data||[],categories:ca.data||[],teams:te.data||[],sessions:se.data||[],attendance:att.data||[],arrears:ar.data||[],settings:settings.data||null,saasSubscriptions:subs.data||[],saasPayments:saasPay.data||[],clubs:clubs.data||[]})
   setLoading(false)
  }
  const canManage=role==='owner'||role==='admin', canOperate=canManage||role==='staff'
- const nav=canOperate?['dashboard','athletes','memberships','payments','products','staff','teams','attendance','arrears','reports','communications',...(canManage?['settings','audit']:[])]:['athletes','attendance']
- const labels:any={dashboard:'Dashboard',athletes:'Deportistas',memberships:'Membresías',payments:'Caja y pagos',products:'Productos e inventario',staff:'Personal',communications:'Comunicaciones',audit:'Auditoría',teams:'Equipos y categorías',attendance:'Asistencia',arrears:'Cartera y morosidad',reports:'Reportes',settings:'Configuración'}
+ const nav=canOperate?['dashboard','athletes','memberships','payments','products','staff','teams','attendance','arrears','reports','communications',...(canManage?['settings','audit']:[]),...(isPlatformAdmin?['billing']:[])]:['athletes','attendance']
+ const labels:any={dashboard:'Dashboard',athletes:'Deportistas',memberships:'Membresías',payments:'Caja y pagos',products:'Productos e inventario',staff:'Personal',communications:'Comunicaciones',audit:'Auditoría',teams:'Equipos y categorías',attendance:'Asistencia',arrears:'Cartera y morosidad',reports:'Reportes',settings:'Configuración',billing:'Suscripciones SaaS'}
  const active=data.memberships.filter((m:Row)=>m.status==='active'&&m.end_date>=today())
  const exp=active.filter((m:Row)=>daysLeft(m.end_date)<=7).sort((a:Row,b:Row)=>a.end_date.localeCompare(b.end_date))
  const month=today().slice(0,7)
@@ -93,6 +98,7 @@ export default function App(){
    {tab==='reports'&&<Reports data={data} range={reportRange} setRange={setReportRange}/>} 
    {tab==='settings'&&canManage&&<Settings data={data} close={close} load={load} role={role}/>} 
    {tab==='audit'&&<Audit rows={data.audit}/>} 
+   {tab==='billing'&&isPlatformAdmin&&<PlatformBilling data={data} load={load}/>} 
   </main>
   {modal==='athlete'&&<Modal title={(f as any)['id']?'Editar deportista':'Nuevo deportista'} close={close}><AthleteForm f={f} setF={setF} save={async()=>{const payload:any={...f,full_name:(f as Row).full_name?.trim()};delete payload.id;delete payload.created_at;delete payload.updated_at;const r=(f as any)['id']?await supabase.from('athletes').update(payload).eq('id',(f as any)['id']):await supabase.from('athletes').insert(payload);if(r.error)setMsg(r.error.message);else{close();load()}}} msg={msg}/></Modal>}
   {modal==='register'&&<Modal title="Nueva inscripción" close={close}><Register data={data} f={f} setF={setF} close={close}/></Modal>}
@@ -192,5 +198,91 @@ function Arrears({data}:any){const due=data.arrears.filter((x:Row)=>Number(x.amo
 function Reports({data,range,setRange}:any){const inRange=(d:string)=>d&&d.slice(0,10)>=range.from&&d.slice(0,10)<=range.to;const payments=data.payments.filter((p:Row)=>p.status==='confirmed'&&inRange(p.paid_at||p.created_at));const staff=data.staffPayments.filter((p:Row)=>p.status==='confirmed'&&inRange(p.paid_at||p.created_at));const sales=data.sales.filter((s:Row)=>inRange(s.created_at));const income=payments.reduce((n:number,p:Row)=>n+Number(p.amount||0),0);const payroll=staff.reduce((n:number,p:Row)=>n+Number(p.amount||0),0);const productIncome=sales.reduce((n:number,s:Row)=>n+Number(s.total||0),0);const exportCsv=()=>{const rows=[['Reporte','RIVER Volleyball Club'],['Desde',range.from],['Hasta',range.to],[],['Indicador','Valor'],['Ingresos confirmados',income],['Ventas de productos',productIncome],['Pagos a personal',payroll],['Cartera pendiente',data.arrears.reduce((n:number,x:Row)=>n+Number(x.amount_due||0),0)]];const csv=rows.map((r:any)=>r.map((v:any)=>'"'+String(v??'').replace(/"/g,'""')+'"').join(',')).join('\\n');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download='river-reporte-'+range.from+'-'+range.to+'.csv';a.click()};return <><section><div className="reportcontrols"><label>Desde<input type="date" value={range.from} onChange={e=>setRange({...range,from:e.target.value})}/></label><label>Hasta<input type="date" value={range.to} onChange={e=>setRange({...range,to:e.target.value})}/></label><button onClick={exportCsv}>Exportar CSV</button><button onClick={()=>window.print()}>Imprimir / PDF</button></div></section><div className="stats"><Card n={money(income)} l="Ingresos confirmados"/><Card n={money(productIncome)} l="Ventas productos"/><Card n={money(payroll)} l="Pagos a personal"/><Card n={money(income-payroll)} l="Flujo neto registrado"/></div><div className="grid2"><section><h2>Ingresos por concepto</h2><Table head={['Concepto','Valor']} rows={['registration','membership','product'].map((c:string)=>[c,money(payments.filter((p:Row)=>p.concept===c).reduce((n:number,p:Row)=>n+Number(p.amount),0))])}/></section><section><h2>Estado de cartera</h2><Table head={['Estado','Casos','Valor']} rows={['pending','overdue','paid'].map((s:string)=>[s,data.arrears.filter((x:Row)=>x.debt_status===s).length,money(data.arrears.filter((x:Row)=>x.debt_status===s).reduce((n:number,x:Row)=>n+Number(x.amount_due),0))])}/></section></div></>}
 
 function Settings({data,load,role}:any){const s=data.settings||{};const [f,setF]=useState({club_name:s.club_name||'RIVER Volleyball Club',currency:s.currency||'COP',locale:s.locale||'es-CO',reminder_days:s.reminder_days??7,payment_methods:(s.payment_methods||['cash','transfer','card','other']).join(', '),templates:JSON.stringify(s.communication_templates||{},null,2)});const [users,setUsers]=useState<Row[]>([]);const [u,setU]=useState({full_name:'',email:'',password:'',role:'staff'});const [umsg,setUmsg]=useState('');useEffect(()=>{supabase.functions.invoke('admin-users',{body:{action:'list'}}).then(({data,error})=>{if(error)setUmsg(error.message);else setUsers(data?.users||[])})},[]);const save=async()=>{let templates:any={};try{templates=JSON.parse(f.templates||'{}')}catch{return alert('Las plantillas deben ser JSON válido.')}const r=await supabase.from('club_settings').upsert({club_id:s.club_id,club_name:f.club_name.trim(),currency:f.currency.toUpperCase(),locale:f.locale,reminder_days:Number(f.reminder_days),payment_methods:f.payment_methods.split(',').map((x:string)=>x.trim()).filter(Boolean),communication_templates:templates,updated_by:(await supabase.auth.getUser()).data.user?.id,updated_at:new Date().toISOString()});if(r.error)alert(r.error.message);else{alert('Configuración guardada');load()}};const createClub=async()=>{const name=prompt('Nombre del nuevo club');if(!name?.trim())return;const slug=prompt('Slug del club (ej. club-nuevo)');if(!slug?.trim())return;const r=await supabase.rpc('create_club',{p_name:name.trim(),p_slug:slug.trim()});if(r.error)return setUmsg(r.error.message);alert('Club creado y seleccionado');location.reload()};const create=async()=>{setUmsg('');const r=await supabase.functions.invoke('admin-users',{body:{action:'create',...u}});if(r.error||r.data?.error)setUmsg(r.error?.message||r.data?.error||'No se pudo crear');else{setU({full_name:'',email:'',password:'',role:'staff'});const x=await supabase.functions.invoke('admin-users',{body:{action:'list'}});setUsers(x.data?.users||[])}};const role=async(id:string,value:string)=>{const r=await supabase.functions.invoke('admin-users',{body:{action:'role',id,role:value}});if(r.error||r.data?.error)return setUmsg(r.error?.message||r.data?.error);const x=await supabase.functions.invoke('admin-users',{body:{action:'list'}});setUsers(x.data?.users||[])};return <><section><div className="sectionhead"><h2>Configuración general</h2>{role==='owner'&&<button onClick={createClub}>+ Nuevo club</button>}<button onClick={save}>Guardar cambios</button></div><div className="formgrid"><label>Nombre del club<input value={f.club_name} onChange={e=>setF({...f,club_name:e.target.value})}/></label><label>Moneda<input value={f.currency} onChange={e=>setF({...f,currency:e.target.value.toUpperCase()})}/></label><label>Localización<input value={f.locale} onChange={e=>setF({...f,locale:e.target.value})}/></label><label>Días de aviso de vencimiento<input type="number" min="0" max="30" value={f.reminder_days??''} onChange={e=>setF({...f,reminder_days:e.target.value})}/></label><label>Métodos de pago (separados por coma)<input value={f.payment_methods} onChange={e=>setF({...f,payment_methods:e.target.value})}/></label><label>Plantillas de comunicación (JSON)<textarea value={f.templates} onChange={e=>setF({...f,templates:e.target.value})}/></label></div></section><section><div className="sectionhead"><div><h2>Usuarios y roles</h2><small>Crear usuarios y asignar permisos del Club OS.</small></div></div><div className="formgrid"><label>Nombre<input value={u.full_name} onChange={e=>setU({...u,full_name:e.target.value})}/></label><label>Correo<input type="email" value={u.email} onChange={e=>setU({...u,email:e.target.value})}/></label><label>Contraseña temporal (mín. 8 caracteres)<input type="password" value={u.password} onChange={e=>setU({...u,password:e.target.value})}/></label><Select label="Rol" value={u.role} set={(v:string)=>setU({...u,role:v})} options={[['staff','Staff'],['admin','Administrador'],['owner','Owner']]}/><button onClick={create}>Crear usuario</button>{umsg&&<div className="error">{umsg}</div>}</div><Table head={['Nombre','Correo','Rol','Último acceso']} rows={users.map((x:Row)=>[x.full_name||'—',x.email||'—',<select value={x.role} onChange={e=>role(x.id,e.target.value)}><option value="staff">Staff</option><option value="admin">Admin</option><option value="owner">Owner</option></select>,x.last_sign_in_at?.slice(0,10)||'Nunca'])}/></section></>}
+
+
+function PlatformBilling({data,load}:any){
+ const [editing,setEditing]=useState<Row|null>(null)
+ const [payment,setPayment]=useState<Row|null>(null)
+ const [saving,setSaving]=useState(false)
+ const [msg,setMsg]=useState('')
+ const clubs=data.clubs||[]
+ const subs=data.saasSubscriptions||[]
+ const payments=data.saasPayments||[]
+ const statusLabel=(s:string)=>({trial:'Prueba',active:'Activo',past_due:'Vencido',suspended:'Suspendido',cancelled:'Cancelado'}[s]||s)
+ const days=(s:string)=>daysLeft(s)
+ const save=async()=>{
+  if(!editing)return
+  setSaving(true);setMsg('')
+  const r=await supabase.from('saas_subscriptions').update({
+   monthly_price:Number(editing.monthly_price||0),
+   billing_cycle:editing.billing_cycle||'monthly',
+   current_period_start:editing.current_period_start,
+   current_period_end:editing.current_period_end,
+   status:editing.status||'active',
+   auto_renew:editing.auto_renew!==false,
+   notes:editing.notes||null,
+   updated_at:new Date().toISOString()
+  }).eq('club_id',editing.club_id)
+  setSaving(false)
+  if(r.error){setMsg(r.error.message);return}
+  setEditing(null);load()
+ }
+ const recordPayment=async()=>{
+  if(!payment)return
+  const amount=Number(payment.amount||0)
+  if(amount<=0)return setMsg('El valor del pago debe ser mayor que cero.')
+  setSaving(true);setMsg('')
+  const r=await supabase.from('saas_payments').insert({
+   club_id:payment.club_id,
+   subscription_period_start:payment.subscription_period_start,
+   subscription_period_end:payment.subscription_period_end,
+   amount,
+   paid_at:payment.paid_at||new Date().toISOString(),
+   method:payment.method||'transfer',
+   reference:payment.reference||null,
+   notes:payment.notes||null,
+   created_by:(await supabase.auth.getUser()).data.user?.id
+  })
+  setSaving(false)
+  if(r.error){setMsg(r.error.message);return}
+  setPayment(null);load()
+ }
+ return <section>
+  <div className="sectionhead"><div><h2>Suscripciones de clubes</h2><small>Control de cobro del software por cada club, independiente de la caja del club.</small></div></div>
+  {msg&&<div className="error">{msg}</div>}
+  <div className="stats three">
+   <Card n={clubs.length} l="Clubes"/>
+   <Card n={subs.filter((s:Row)=>s.status==='active').length} l="Suscripciones activas"/>
+   <Card n={subs.filter((s:Row)=>s.current_period_end<today()||s.status==='past_due').length} l="Pendientes de cobro"/>
+  </div>
+  <Table head={['Club','Plan','Valor mensual','Periodo actual','Vence','Estado','Acciones']} rows={clubs.map((club:Row)=>{
+   const s=subs.find((x:Row)=>x.club_id===club.id)
+   if(!s)return [club.name,'—','—','—','—','Sin suscripción',<button onClick={()=>setEditing({club_id:club.id,monthly_price:100000,billing_cycle:'monthly',current_period_start:today(),current_period_end:addDays(today(),30),status:'active',auto_renew:true,notes:''})}>Configurar</button>]
+   const d=days(s.current_period_end)
+   const state=s.status==='active'&&d<0?'past_due':s.status
+   return [club.name,'Mensual',money(s.monthly_price),s.current_period_start+' → '+s.current_period_end,<span className={d<=7?'warn':''}>{d<0?'Vencido':d===0?'Vence hoy':'Faltan '+d+' días'}</span>,statusLabel(state),<div className="actions"><button onClick={()=>setEditing({...s})}>Editar</button><button onClick={()=>setPayment({club_id:s.club_id,subscription_period_start:s.current_period_start,subscription_period_end:s.current_period_end,amount:String(s.monthly_price),method:'transfer',paid_at:new Date().toISOString().slice(0,16)})}>Registrar pago</button></div>]
+  })}/>
+  {editing&&<Modal title={'Configurar suscripción · '+(clubs.find((c:Row)=>c.id===editing.club_id)?.name||'Club')} close={()=>setEditing(null)}><div className="formgrid">
+   <label>Valor mensual<input type="number" min="0" value={editing.monthly_price??''} onChange={e=>setEditing({...editing,monthly_price:e.target.value})}/></label>
+   <Select label="Ciclo de cobro" value={editing.billing_cycle||'monthly'} set={(v:string)=>setEditing({...editing,billing_cycle:v})} options={[['monthly','Mensual'],['quarterly','Trimestral'],['annual','Anual']]}/>
+   <label>Inicio del periodo<input type="date" value={editing.current_period_start||''} onChange={e=>setEditing({...editing,current_period_start:e.target.value})}/></label>
+   <label>Fin del periodo<input type="date" value={editing.current_period_end||''} onChange={e=>setEditing({...editing,current_period_end:e.target.value})}/></label>
+   <Select label="Estado" value={editing.status||'active'} set={(v:string)=>setEditing({...editing,status:v})} options={[['trial','Prueba'],['active','Activo'],['past_due','Vencido'],['suspended','Suspendido'],['cancelled','Cancelado']]}/>
+   <label>Renovación automática<select value={String(editing.auto_renew!==false)} onChange={e=>setEditing({...editing,auto_renew:e.target.value==='true'})}><option value="true">Sí</option><option value="false">No</option></select></label>
+   <label>Notas<textarea value={editing.notes||''} onChange={e=>setEditing({...editing,notes:e.target.value})}/></label>
+   <button disabled={saving} onClick={save}>{saving?'Guardando…':'Guardar suscripción'}</button>
+  </div></Modal>}
+  {payment&&<Modal title={'Registrar pago · '+(clubs.find((c:Row)=>c.id===payment.club_id)?.name||'Club')} close={()=>setPayment(null)}><div className="formgrid">
+   <label>Periodo<input value={payment.subscription_period_start+' → '+payment.subscription_period_end} readOnly/></label>
+   <label>Valor recibido<input type="number" min="0.01" value={payment.amount??''} onChange={e=>setPayment({...payment,amount:e.target.value})}/></label>
+   <label>Fecha de pago<input type="datetime-local" value={payment.paid_at||''} onChange={e=>setPayment({...payment,paid_at:e.target.value})}/></label>
+   <Select label="Método" value={payment.method||'transfer'} set={(v:string)=>setPayment({...payment,method:v})} options={methods}/>
+   <label>Referencia<input value={payment.reference||''} onChange={e=>setPayment({...payment,reference:e.target.value})}/></label>
+   <label>Notas<textarea value={payment.notes||''} onChange={e=>setPayment({...payment,notes:e.target.value})}/></label>
+   <button disabled={saving} onClick={recordPayment}>{saving?'Registrando…':'Registrar pago'}</button>
+  </div></Modal>}
+  <section><h2>Historial de pagos del software</h2><Table head={['Fecha','Club','Periodo','Valor','Método','Referencia']} rows={payments.map((p:Row)=>[p.paid_at?.slice(0,10),clubs.find((c:Row)=>c.id===p.club_id)?.name||'—',p.subscription_period_start+' → '+p.subscription_period_end,money(p.amount),p.method||'—',p.reference||'—'])}/></section>
+ </section>
+}
 
 function ClubSwitcher({onSwitched}:{onSwitched:()=>void}){const [clubs,setClubs]=useState<Row[]>([]),[active,setActive]=useState('');useEffect(()=>{(async()=>{const u=await supabase.auth.getUser();const p=await supabase.from('profiles').select('active_club_id').eq('id',u.data.user?.id||'').maybeSingle();setActive(p.data?.active_club_id||'');const m=await supabase.from('club_memberships').select('club_id').eq('user_id',u.data.user?.id||'').eq('active',true);const ids=(m.data||[]).map((x:Row)=>x.club_id);if(ids.length){const cs=await supabase.from('clubs').select('id,name').in('id',ids);setClubs(cs.data||[])}})()},[]);if(!clubs.length)return null;const change=async(id:string)=>{if(id===active)return;const r=await supabase.rpc('switch_club',{p_club_id:id});if(r.error)return alert(r.error.message);setActive(id);onSwitched();location.reload()};return <select aria-label="Club activo" value={active} onChange={e=>change(e.target.value)}>{clubs.map((c:Row)=><option key={c.id} value={c.id}>{c.name}</option>)}</select>}
