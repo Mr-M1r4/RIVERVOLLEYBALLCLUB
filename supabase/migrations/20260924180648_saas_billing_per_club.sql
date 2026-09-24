@@ -17,7 +17,12 @@ create index if not exists saas_payments_club_paid_at_idx on public.saas_payment
 create index if not exists saas_payments_created_by_idx on public.saas_payments(created_by);
 create index if not exists saas_subscriptions_period_end_idx on public.saas_subscriptions(current_period_end);
 
-insert into public.platform_admins(user_id) select p.id from public.profiles p where p.id = '395d072b-a818-4c1b-a162-c7022fc7d141' on conflict do nothing;
+insert into public.platform_admins(user_id)
+select p.id from public.profiles p
+where p.active_club_id = '00000000-0000-0000-0000-000000000001' and p.role = 'owner'
+order by p.id
+limit 1
+on conflict do nothing;
 insert into public.saas_subscriptions(club_id, monthly_price, billing_cycle, started_on, current_period_start, current_period_end) select c.id, 100000, 'monthly', current_date, current_date, (current_date + interval '1 month')::date - 1 from public.clubs c on conflict (club_id) do nothing;
 
 create or replace function private.touch_saas_subscription() returns trigger language plpgsql security definer set search_path = public, private as $$ begin update public.saas_subscriptions set updated_at = now() where club_id = new.club_id; return new; end; $$;
