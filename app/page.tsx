@@ -41,7 +41,7 @@ export default function App(){
   const user=u.data.user
   if(user){
    const prf=await supabase.from('profiles').select('role,active_club_id').eq('id',user.id).maybeSingle()
-   setRole(prf.data?.role||'staff')
+   const cm=prf.data?.active_club_id?await supabase.from('club_memberships').select('role').eq('club_id',prf.data.active_club_id).eq('user_id',user.id).eq('active',true).maybeSingle():{data:null}; setRole(cm.data?.role||prf.data?.role||'staff')
    const me=(s.data||[]).find((x:Row)=>x.email?.toLowerCase()===user.email?.toLowerCase())
    setStaffRole(me?.role||'')
   }
@@ -90,7 +90,7 @@ export default function App(){
    {tab==='attendance'&&<Attendance data={data} canManage={canManage} onMark={(s:Row)=>{setF({session:s});setModal('attendance')}}/>}
    {tab==='arrears'&&<Arrears data={data}/>} 
    {tab==='reports'&&<Reports data={data} range={reportRange} setRange={setReportRange}/>} 
-   {tab==='settings'&&canManage&&<Settings data={data} close={close} load={load}/>} 
+   {tab==='settings'&&canManage&&<Settings data={data} role={role} load={load}/>} 
    {tab==='audit'&&<Audit rows={data.audit}/>} 
   </main>
   {modal==='athlete'&&<Modal title={(f as any)['id']?'Editar deportista':'Nuevo deportista'} close={close}><AthleteForm f={f} setF={setF} save={async()=>{const payload:any={...f,full_name:(f as Row).full_name?.trim()};delete payload.id;delete payload.created_at;delete payload.updated_at;const r=(f as any)['id']?await supabase.from('athletes').update(payload).eq('id',(f as any)['id']):await supabase.from('athletes').insert(payload);if(r.error)setMsg(r.error.message);else{close();load()}}} msg={msg}/></Modal>}
@@ -190,7 +190,7 @@ function Arrears({data}:any){const due=data.arrears.filter((x:Row)=>Number(x.amo
 
 function Reports({data,range,setRange}:any){const inRange=(d:string)=>d&&d.slice(0,10)>=range.from&&d.slice(0,10)<=range.to;const payments=data.payments.filter((p:Row)=>p.status==='confirmed'&&inRange(p.paid_at||p.created_at));const staff=data.staffPayments.filter((p:Row)=>p.status==='confirmed'&&inRange(p.paid_at||p.created_at));const sales=data.sales.filter((s:Row)=>inRange(s.created_at));const income=payments.reduce((n:number,p:Row)=>n+Number(p.amount||0),0);const payroll=staff.reduce((n:number,p:Row)=>n+Number(p.amount||0),0);const productIncome=sales.reduce((n:number,s:Row)=>n+Number(s.total||0),0);const exportCsv=()=>{const rows=[['Reporte','RIVER Volleyball Club'],['Desde',range.from],['Hasta',range.to],[],['Indicador','Valor'],['Ingresos confirmados',income],['Ventas de productos',productIncome],['Pagos a personal',payroll],['Cartera pendiente',data.arrears.reduce((n:number,x:Row)=>n+Number(x.amount_due||0),0)]];const csv=rows.map((r:any)=>r.map((v:any)=>'"'+String(v??'').replace(/"/g,'""')+'"').join(',')).join('\\n');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download='river-reporte-'+range.from+'-'+range.to+'.csv';a.click()};return <><section><div className="reportcontrols"><label>Desde<input type="date" value={range.from} onChange={e=>setRange({...range,from:e.target.value})}/></label><label>Hasta<input type="date" value={range.to} onChange={e=>setRange({...range,to:e.target.value})}/></label><button onClick={exportCsv}>Exportar CSV</button><button onClick={()=>window.print()}>Imprimir / PDF</button></div></section><div className="stats"><Card n={money(income)} l="Ingresos confirmados"/><Card n={money(productIncome)} l="Ventas productos"/><Card n={money(payroll)} l="Pagos a personal"/><Card n={money(income-payroll)} l="Flujo neto registrado"/></div><div className="grid2"><section><h2>Ingresos por concepto</h2><Table head={['Concepto','Valor']} rows={['registration','membership','product'].map((c:string)=>[c,money(payments.filter((p:Row)=>p.concept===c).reduce((n:number,p:Row)=>n+Number(p.amount),0))])}/></section><section><h2>Estado de cartera</h2><Table head={['Estado','Casos','Valor']} rows={['pending','overdue','paid'].map((s:string)=>[s,data.arrears.filter((x:Row)=>x.debt_status===s).length,money(data.arrears.filter((x:Row)=>x.debt_status===s).reduce((n:number,x:Row)=>n+Number(x.amount_due),0))])}/></section></div></>}
 
-function Settings({data,load}:any){
+function Settings({data,role,load}:any){
  const s=data.settings||{};
  const [f,setF]=useState({club_name:s.club_name||'RIVER Volleyball Club',currency:s.currency||'COP',locale:s.locale||'es-CO',reminder_days:s.reminder_days??7,payment_methods:(s.payment_methods||['cash','transfer','card','other']).join(', '),templates:JSON.stringify(s.communication_templates||{},null,2)});
  const [users,setUsers]=useState<Row[]>([]),[clubs,setClubs]=useState<Row[]>([]),[u,setU]=useState({full_name:'',email:'',password:'',role:'staff'}),[newClub,setNewClub]=useState({name:'',slug:''}),[umsg,setUmsg]=useState('');
