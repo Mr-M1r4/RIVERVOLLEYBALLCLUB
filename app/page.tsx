@@ -65,12 +65,12 @@ export default function App(){
  return <div className="app" style={{'--img-textura':'url('+base+'/textura.jpg)','--img-lineas':'url('+base+'/lineas.png)'} as any}>
   <aside>
    <img className="brand" src={base+'/logo.jpg'} alt="RIVER"/>
-   <small>CLUB OS · {role.toUpperCase()}</small>
+   <small>CLUB OS · {role.toUpperCase()} · {data.settings?.club_name||'RIVER Volleyball Club'}</small>
    <nav>{nav.map((n:string)=><button key={n} className={tab===n?'active':''} onClick={()=>setTab(n)}>{labels[n]}</button>)}</nav>
    <div className="sidebottom"><span>{session.user.email}</span><button onClick={()=>supabase.auth.signOut()}>Cerrar sesión</button></div>
   </aside>
   <main className="main">
-   <header><div><small>RIVER VOLLEYBALL CLUB</small><h1>{labels[tab]}</h1></div><div className="actions">
+   <header><div><small>{data.settings?.club_name||'RIVER VOLLEYBALL CLUB'}</small><h1>{labels[tab]}</h1></div><div className="actions">
     {tab==='athletes'&&canOperate&&<button onClick={()=>{setF({status:'active'});setModal('athlete')}}>+ Deportista</button>}
     {tab==='memberships'&&canOperate&&<button onClick={()=>{setF({start_date:today(),registration_amount:0});setModal('register')}}>+ Inscripción</button>}
     {tab==='payments'&&canOperate&&<button onClick={()=>{setF({status:'confirmed',paid_at:new Date().toISOString().slice(0,16)});setModal('payment')}}>+ Pago</button>}
