@@ -64,6 +64,16 @@ export default function App(){
  const pending=data.notifications.filter((n:Row)=>n.status==='pending').length
  const filtered=data.athletes.filter((a:Row)=>[a.full_name,a.document_number,a.phone,a.email,a.category,a.team].join(' ').toLowerCase().includes(q.toLowerCase()))
  const close=()=>{setModal('');setF({});setMsg('')}
+ const createClub=async()=>{
+  const name=prompt('Nombre del nuevo club')
+  if(!name?.trim())return
+  const slug=prompt('Slug del club (ej. club-nuevo)')
+  if(!slug?.trim())return
+  const r=await supabase.rpc('create_club',{p_name:name.trim(),p_slug:slug.trim()})
+  if(r.error)return alert(r.error.message)
+  alert('Club creado y seleccionado')
+  location.reload()
+ }
 
  if(loading)return <div className="splash"><div><img src={base+'/logo.jpg'} className="brand brand-lg"/><p>Cargando RIVER Club OS…</p></div></div>
  if(!session)return <Login base={base}/>
@@ -76,7 +86,7 @@ export default function App(){
    <div className="sidebottom"><span>{session.user.email}</span><button onClick={()=>supabase.auth.signOut()}>Cerrar sesión</button></div>
   </aside>
   <main className="main">
-   <header><div><small>{data.settings?.club_name||'RIVER VOLLEYBALL CLUB'}</small><h1>{labels[tab]}</h1></div><div className="actions"><ClubSwitcher onSwitched={load}/>
+   <header><div><small>{data.settings?.club_name||'RIVER VOLLEYBALL CLUB'}</small><h1>{labels[tab]}</h1></div><div className="actions"><ClubSwitcher onSwitched={load}/>{role==='owner'&&<button onClick={createClub}>+ Nuevo club</button>}
     {tab==='athletes'&&canOperate&&<button onClick={()=>{setF({status:'active'});setModal('athlete')}}>+ Deportista</button>}
     {tab==='memberships'&&canOperate&&<button onClick={()=>{setF({start_date:today(),registration_amount:0});setModal('register')}}>+ Inscripción</button>}
     {tab==='payments'&&canOperate&&<button onClick={()=>{setF({status:'confirmed',paid_at:new Date().toISOString().slice(0,16)});setModal('payment')}}>+ Pago</button>}
