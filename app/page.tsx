@@ -86,7 +86,7 @@ export default function App(){
    <div className="sidebottom"><span>{session.user.email}</span><button onClick={()=>supabase.auth.signOut()}>Cerrar sesión</button></div>
   </aside>
   <main className="main">
-   <header><div><small>{data.settings?.club_name||'RIVER VOLLEYBALL CLUB'}</small><h1>{labels[tab]}</h1></div><div className="actions"><ClubSwitcher onSwitched={load}/>
+   <header><div><small>{data.settings?.club_name||'RIVER VOLLEYBALL CLUB'}</small><h1>{labels[tab]}</h1></div><div className="actions"><ClubSwitcher onSwitched={load}/>{(role==='owner'||isPlatformAdmin)&&<button onClick={createClub}>+ Nuevo club</button>}
     {tab==='athletes'&&canOperate&&<button onClick={()=>{setF({status:'active'});setModal('athlete')}}>+ Deportista</button>}
     {tab==='memberships'&&canOperate&&<button onClick={()=>{setF({start_date:today(),registration_amount:0});setModal('register')}}>+ Inscripción</button>}
     {tab==='payments'&&canOperate&&<button onClick={()=>{setF({status:'confirmed',paid_at:new Date().toISOString().slice(0,16)});setModal('payment')}}>+ Pago</button>}
